@@ -2,59 +2,78 @@ import streamlit as st
 import pandas as pd
 import io
 
-st.set_page_config(page_title="Limpieza Contable Pro", page_icon="🧾")
+# Configuración de la aplicación
+st.set_page_config(page_title="Procesador Contable Agustín", page_icon="📈")
 
-st.title("🧾 Procesador de Reportes Contables")
-st.write("Subí tu reporte (XLS o XLSX), limpiá filas innecesarias y completá los datos faltantes.")
+st.title("📈 Procesador de Reportes e Información")
+st.write("Esta herramienta limpia filas de totales, encabezados de localidad y completa datos faltantes (ffill).")
 
-# 1. Selector de archivo (ahora acepta ambos formatos)
-archivo_subido = st.file_uploader("Subí tu archivo de Excel", type=["xlsx", "xls"])
+# 1. Subida del archivo
+archivo_subido = st.file_uploader("Subí tu archivo de Excel (.xls o .xlsx)", type=["xlsx", "xls"])
 
 if archivo_subido is not None:
     try:
-        # Pandas detecta automáticamente si es .xls o .xlsx si tenés instaladas las librerías
-        df = pd.read_excel(archivo_subido)
+        # Identificamos el formato para elegir el motor correcto
+        nombre_archivo = archivo_subido.name.lower()
+        if nombre_archivo.endswith('.xls'):
+            motor = 'xlrd'
+        else:
+            motor = 'openpyxl'
+            
+        # Leemos el archivo
+        df = pd.read_excel(archivo_subido, engine=motor)
+        st.success(f"Archivo cargado: {nombre_archivo}")
         
-        st.subheader("Configuración de limpieza")
+        st.subheader("Opciones de Limpieza")
         
-        # Opciones de limpieza mediante checkboxes
-        eliminar_vacios = st.checkbox("Eliminar filas totalmente vacías", value=True)
-        eliminar_totales = st.checkbox("Eliminar filas de 'Totales' y 'Subtotales'", value=True)
+        # Checkboxes para que decidas qué limpiar
+        limpiar_vacios = st.checkbox("Eliminar filas totalmente vacías", value=True)
+        limpiar_totales = st.checkbox("Eliminar filas con 'Total' o 'Subtotal'", value=True)
+        limpiar_localidad = st.checkbox("Eliminar filas que mencionen 'Localidad'", value=True)
         
+        # Selector de columna para el ffill
         columnas = df.columns.tolist()
-        columna_a_completar = st.selectbox("Columna a completar (ffill)", columnas)
+        columna_a_rellenar = st.selectbox("¿Qué columna querés completar hacia abajo?", columnas)
 
-        if st.button("Procesar Archivo"):
-            df_final = df.copy()
+        if st.button("Procesar y Limpiar"):
+            df_temp = df.copy()
 
-            # A. Eliminar filas totalmente vacías
-            if eliminar_vacios:
-                df_final = df_final.dropna(how='all')
+            # A. Eliminamos filas vacías
+            if limpiar_vacios:
+                df_temp = df_temp.dropna(how='all')
 
-            # B. Eliminar filas que contengan "Total" o "Subtotal"
-            if eliminar_totales:
-                # Buscamos las palabras clave en todas las celdas de la fila (sin importar mayúsculas)
-                mask = df_final.apply(lambda row: row.astype(str).str.contains('total|subtotal', case=False).any(), axis=1)
-                df_final = df_final[~mask]
+            # B. Filtro inteligente para Totales, Subtotales y Localidad
+            # Creamos una lista de palabras a buscar
+            palabras_ruido = []
+            if limpiar_totales:
+                palabras_ruido.extend(['total', 'subtotal'])
+            if limpiar_localidad:
+                palabras_ruido.append('localidad')
+            
+            if palabras_ruido:
+                regex_busqueda = '|'.join(palabras_ruido)
+                # Buscamos en todas las columnas de la fila
+                mask = df_temp.apply(lambda row: row.astype(str).str.contains(regex_busqueda, case=False).any(), axis=1)
+                df_temp = df_temp[~mask]
 
-            # C. Completar datos hacia abajo
-            df_final[columna_a_completar] = df_final[columna_a_completar].ffill()
+            # C. Completamos los datos hacia abajo (ffill)
+            df_temp[columna_a_rellenar] = df_temp[columna_a_rellenar].ffill()
 
-            st.success(f"¡Listo! Se procesaron {len(df_final)} filas.")
-            st.dataframe(df_final.head(15))
+            st.success("¡Proceso finalizado!")
+            st.write(f"Filas resultantes: {len(df_temp)}")
+            st.dataframe(df_temp.head(20))
 
-            # Preparar descarga (siempre en .xlsx por comodidad)
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                df_final.to_excel(writer, index=False, sheet_name='Reporte_Limpio')
+            # Preparación del archivo para descarga
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_temp.to_excel(writer, index=False, sheet_name='Reporte_Procesado')
             
             st.download_button(
-                label="📥 Descargar Reporte Limpio (.xlsx)",
-                data=buffer.getvalue(),
-                file_name="reporte_procesado.xlsx",
+                label="📥 Descargar Excel Limpio",
+                data=output.getvalue(),
+                file_name="reporte_finalizado.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            
+
     except Exception as e:
-        st.error(f"Error al leer el archivo: {e}")
-        st.info("Asegurate de que el archivo no esté protegido con contraseña.")
+        st.error(f"Se produjo un error al procesar el archivo: {e}")
