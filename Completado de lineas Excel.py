@@ -2,49 +2,59 @@ import streamlit as st
 import pandas as pd
 import io
 
-# Configuración de la página
-st.set_page_config(page_title="Completar Datos", page_icon="📊")
+st.set_page_config(page_title="Limpieza Contable Pro", page_icon="🧾")
 
-st.title("📊 Completador de Datos para Reportes")
-st.write("Subí tu archivo de Excel, elegí la columna que tiene los espacios en blanco y la app los va a rellenar copiando el dato de arriba.")
+st.title("🧾 Procesador de Reportes Contables")
+st.write("Subí tu reporte (XLS o XLSX), limpiá filas innecesarias y completá los datos faltantes.")
 
-# 1. Subir el archivo
-archivo_subido = st.file_uploader("Subí tu archivo Excel acá", type=["xlsx", "xls"])
+# 1. Selector de archivo (ahora acepta ambos formatos)
+archivo_subido = st.file_uploader("Subí tu archivo de Excel", type=["xlsx", "xls"])
 
 if archivo_subido is not None:
-    # Leer el archivo Excel
-    df = pd.read_excel(archivo_subido, engine='openpyxl')
-    
-    st.subheader("Vista previa de tu archivo original")
-    st.dataframe(df.head(10)) # Muestra las primeras 10 filas
-
-    # 2. Elegir la columna a procesar
-    columnas = df.columns.tolist()
-    columna_elegida = st.selectbox("¿Qué columna necesitás completar hacia abajo?", columnas)
-
-    # 3. Botón para ejecutar el proceso
-    if st.button("Completar Datos"):
-        # Hacemos una copia para no alterar el original en memoria
-        df_procesado = df.copy()
+    try:
+        # Pandas detecta automáticamente si es .xls o .xlsx si tenés instaladas las librerías
+        df = pd.read_excel(archivo_subido)
         
-        # Esta es la magia: ffill() rellena los vacíos con el último valor válido
-        df_procesado[columna_elegida] = df_procesado[columna_elegida].ffill()
-
-        st.success("¡Datos completados con éxito!")
+        st.subheader("Configuración de limpieza")
         
-        st.subheader("Vista previa del resultado")
-        st.dataframe(df_procesado.head(10))
-
-        # 4. Preparar el archivo para descargar
-        buffer = io.BytesIO()
-        # Usamos openpyxl como motor para escribir el Excel
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df_procesado.to_excel(writer, index=False, sheet_name='Datos_Completos')
+        # Opciones de limpieza mediante checkboxes
+        eliminar_vacios = st.checkbox("Eliminar filas totalmente vacías", value=True)
+        eliminar_totales = st.checkbox("Eliminar filas de 'Totales' y 'Subtotales'", value=True)
         
-        # Botón de descarga
-        st.download_button(
-            label="📥 Descargar Excel Listo",
-            data=buffer.getvalue(),
-            file_name="reporte_completado.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        columnas = df.columns.tolist()
+        columna_a_completar = st.selectbox("Columna a completar (ffill)", columnas)
+
+        if st.button("Procesar Archivo"):
+            df_final = df.copy()
+
+            # A. Eliminar filas totalmente vacías
+            if eliminar_vacios:
+                df_final = df_final.dropna(how='all')
+
+            # B. Eliminar filas que contengan "Total" o "Subtotal"
+            if eliminar_totales:
+                # Buscamos las palabras clave en todas las celdas de la fila (sin importar mayúsculas)
+                mask = df_final.apply(lambda row: row.astype(str).str.contains('total|subtotal', case=False).any(), axis=1)
+                df_final = df_final[~mask]
+
+            # C. Completar datos hacia abajo
+            df_final[columna_a_completar] = df_final[columna_a_completar].ffill()
+
+            st.success(f"¡Listo! Se procesaron {len(df_final)} filas.")
+            st.dataframe(df_final.head(15))
+
+            # Preparar descarga (siempre en .xlsx por comodidad)
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df_final.to_excel(writer, index=False, sheet_name='Reporte_Limpio')
+            
+            st.download_button(
+                label="📥 Descargar Reporte Limpio (.xlsx)",
+                data=buffer.getvalue(),
+                file_name="reporte_procesado.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            
+    except Exception as e:
+        st.error(f"Error al leer el archivo: {e}")
+        st.info("Asegurate de que el archivo no esté protegido con contraseña.")
