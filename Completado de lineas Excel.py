@@ -44,7 +44,8 @@ if archivo_subido is not None:
         with col_anio:
             anio = st.selectbox("Año", list(range(2024, 2031)))
         
-        periodo_seleccionado = f"{mes} {anio}"
+        # Tomamos las primeras 3 letras del mes elegido, lo pasamos a mayúscula y armamos el formato
+        periodo_seleccionado = f"{mes[:3].upper()}/{anio}"
 
         if st.button("Procesar y Limpiar"):
             df_temp = df.copy()
