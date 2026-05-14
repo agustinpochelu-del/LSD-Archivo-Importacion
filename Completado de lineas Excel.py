@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
 import io
+from datetime import datetime
 
 # Configuración de la aplicación
-st.set_page_config(page_title="Procesador Contable", page_icon="📈")
+st.set_page_config(page_title="Procesador Contable Profesional", page_icon="📈")
 
 st.title("📈 Procesador de Reportes e Información")
-st.write("Esta herramienta limpia filas de totales, encabezados sueltos, completa datos faltantes (ffill) y acomoda las columnas de Periodo y Total.")
+st.write("Esta herramienta limpia filas, completa datos y genera columnas con formato de fecha real para Excel.")
 
 # 1. Subida del archivo
 archivo_subido = st.file_uploader("Subí tu archivo de Excel (.xls o .xlsx)", type=["xlsx", "xls"])
@@ -15,10 +16,7 @@ if archivo_subido is not None:
     try:
         # Identificamos el formato para elegir el motor correcto
         nombre_archivo = archivo_subido.name.lower()
-        if nombre_archivo.endswith('.xls'):
-            motor = 'xlrd'
-        else:
-            motor = 'openpyxl'
+        motor = 'xlrd' if nombre_archivo.endswith('.xls') else 'openpyxl'
             
         # Leemos el archivo
         df = pd.read_excel(archivo_subido, engine=motor)
@@ -34,18 +32,13 @@ if archivo_subido is not None:
         columnas = df.columns.tolist()
         columna_a_rellenar = st.selectbox("¿Qué columna querés completar hacia abajo? (Ej: Localidad)", columnas)
 
-        # Selección de Periodo
-        st.markdown("**Información del Periodo**")
-        col_mes, col_anio = st.columns(2)
+        # --- SELECCIÓN DE FECHA MEDIANTE CALENDARIO ---
+        st.markdown("**Seleccioná el Periodo (Mes y Año)**")
+        fecha_calendario = st.date_input("Elegí una fecha del mes que necesitás procesar", value=datetime.now())
         
-        with col_mes:
-            mes = st.selectbox("Mes", ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"])
-            
-        with col_anio:
-            anio = st.selectbox("Año", list(range(2024, 2031)))
-        
-        # Tomamos las primeras 3 letras del mes elegido, lo pasamos a mayúscula y armamos el formato
-        periodo_seleccionado = f"{mes[:3].upper()}/{anio}"
+        # Forzamos a que sea el día 1 de ese mes para estandarizar el periodo
+        fecha_periodo = datetime(fecha_calendario.year, fecha_calendario.month, 1)
+        # ----------------------------------------------
 
         if st.button("Procesar y Limpiar"):
             df_temp = df.copy()
@@ -54,7 +47,7 @@ if archivo_subido is not None:
             if limpiar_vacios:
                 df_temp = df_temp.dropna(how='all')
 
-            # B. Filtro para Totales y Subtotales (busca en toda la fila)
+            # B. Filtro para Totales y Subtotales
             if limpiar_totales:
                 regex_busqueda = 'total|subtotal'
                 mask = df_temp.apply(lambda row: row.astype(str).str.contains(regex_busqueda, case=False).any(), axis=1)
@@ -64,7 +57,6 @@ if archivo_subido is not None:
             df_temp[columna_a_rellenar] = df_temp[columna_a_rellenar].ffill()
 
             # D. Eliminar filas que solo tienen dato en la columna que rellenamos 
-            # (Ej: la fila que solo dice "BARILOCHE" y el resto está vacío)
             columnas_restantes = [col for col in df_temp.columns if col != columna_a_rellenar]
             df_temp = df_temp.dropna(subset=columnas_restantes, how='all')
 
@@ -72,20 +64,21 @@ if archivo_subido is not None:
             if 'Total' in df_temp.columns:
                 df_temp = df_temp.drop(columns=['Total'])
 
-            # F. Insertamos la columna "Periodo" en la posición 2 (entre la columna B y C)
-            df_temp.insert(2, "Periodo", periodo_seleccionado)
+            # F. Insertamos la columna "Periodo" como OBJETO FECHA
+            # Esto permite que Excel lo reconozca como fecha automáticamente
+            df_temp.insert(2, "Periodo", fecha_periodo)
 
             st.success("¡Proceso finalizado con éxito!")
-            st.write(f"Filas resultantes: {len(df_temp)}")
             st.dataframe(df_temp.head(20))
 
-            # Preparación del archivo para descarga
+            # Preparación del archivo para descarga con formato de fecha específico
             output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Usamos un motor de escritura que nos permite dar formato a las fechas
+            with pd.ExcelWriter(output, engine='openpyxl', datetime_format='MMM/YYYY') as writer:
                 df_temp.to_excel(writer, index=False, sheet_name='Reporte_Procesado')
             
             st.download_button(
-                label="📥 Descargar Excel Limpio",
+                label="📥 Descargar Excel con Formato Fecha",
                 data=output.getvalue(),
                 file_name="reporte_finalizado.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
