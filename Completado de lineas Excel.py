@@ -56,8 +56,13 @@ if archivo_subido is not None:
                 mask = df_temp.apply(lambda row: row.astype(str).str.contains(regex_busqueda, case=False).any(), axis=1)
                 df_temp = df_temp[~mask]
 
-            # C. Completamos los datos hacia abajo (ffill)
+# C. Completamos los datos hacia abajo (ffill)
             df_temp[columna_a_rellenar] = df_temp[columna_a_rellenar].ffill()
+
+            # D. Eliminar filas que solo tienen dato en la columna que rellenamos
+            # (Ej: cuando dice "BARILOCHE" pero el resto de las columnas están vacías)
+            columnas_restantes = [col for col in df_temp.columns if col != columna_a_rellenar]
+            df_temp = df_temp.dropna(subset=columnas_restantes, how='all')
 
             st.success("¡Proceso finalizado!")
             st.write(f"Filas resultantes: {len(df_temp)}")
