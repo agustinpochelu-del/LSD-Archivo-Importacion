@@ -37,8 +37,7 @@ if archivo_subido is not None:
         # Selección de Periodo
         st.markdown("**Información del Periodo**")
         col_mes, col_anio = st.columns(2)
-        with col_mes:
-            mes = st.selectbox("Mes", ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
-                                        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"])
+       with col_mes:
+            mes = st.selectbox("Mes", ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"])
         with col_anio:
-            anio = st.selectbox("Año",
+            anio = st.selectbox("Año", list(range(2024, 2031)))
