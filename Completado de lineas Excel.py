@@ -37,7 +37,58 @@ if archivo_subido is not None:
         # Selección de Periodo
         st.markdown("**Información del Periodo**")
         col_mes, col_anio = st.columns(2)
-       with col_mes:
+        
+        with col_mes:
             mes = st.selectbox("Mes", ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"])
+            
         with col_anio:
             anio = st.selectbox("Año", list(range(2024, 2031)))
+        
+        periodo_seleccionado = f"{mes} {anio}"
+
+        if st.button("Procesar y Limpiar"):
+            df_temp = df.copy()
+
+            # A. Eliminamos filas vacías
+            if limpiar_vacios:
+                df_temp = df_temp.dropna(how='all')
+
+            # B. Filtro para Totales y Subtotales (busca en toda la fila)
+            if limpiar_totales:
+                regex_busqueda = 'total|subtotal'
+                mask = df_temp.apply(lambda row: row.astype(str).str.contains(regex_busqueda, case=False).any(), axis=1)
+                df_temp = df_temp[~mask]
+
+            # C. Completamos los datos hacia abajo (ffill)
+            df_temp[columna_a_rellenar] = df_temp[columna_a_rellenar].ffill()
+
+            # D. Eliminar filas que solo tienen dato en la columna que rellenamos 
+            # (Ej: la fila que solo dice "BARILOCHE" y el resto está vacío)
+            columnas_restantes = [col for col in df_temp.columns if col != columna_a_rellenar]
+            df_temp = df_temp.dropna(subset=columnas_restantes, how='all')
+
+            # E. Eliminamos la columna "Total" completa
+            if 'Total' in df_temp.columns:
+                df_temp = df_temp.drop(columns=['Total'])
+
+            # F. Insertamos la columna "Periodo" en la posición 2 (entre la columna B y C)
+            df_temp.insert(2, "Periodo", periodo_seleccionado)
+
+            st.success("¡Proceso finalizado con éxito!")
+            st.write(f"Filas resultantes: {len(df_temp)}")
+            st.dataframe(df_temp.head(20))
+
+            # Preparación del archivo para descarga
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_temp.to_excel(writer, index=False, sheet_name='Reporte_Procesado')
+            
+            st.download_button(
+                label="📥 Descargar Excel Limpio",
+                data=output.getvalue(),
+                file_name="reporte_finalizado.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+    except Exception as e:
+        st.error(f"Se produjo un error al procesar el archivo: {e}")
