@@ -13,7 +13,7 @@ archivo_subido = st.file_uploader("Subí tu archivo Excel acá", type=["xlsx", "
 
 if archivo_subido is not None:
     # Leer el archivo Excel
-    df = pd.read_excel(archivo_subido)
+    df = pd.read_excel(archivo_subido, engine='openpyxl')
     
     st.subheader("Vista previa de tu archivo original")
     st.dataframe(df.head(10)) # Muestra las primeras 10 filas
